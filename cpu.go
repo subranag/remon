@@ -17,7 +17,28 @@ type CpuUsage struct {
 	Total uint64
 }
 
+func (c *CpuUsage) Utilization(p *CpuUsage) float64 {
+	pUsage := p.Total - p.Idle
+	cUsage := c.Total - c.Idle
+
+	dp := cUsage - pUsage
+	dt := c.Total - p.Total
+	return (float64(dp) / float64(dt)) * 100.0
+}
+
 type CpuStats map[string]*CpuUsage
+
+func (s CpuStats) Copy(t CpuStats) {
+	for k, v := range s {
+		_, ok := t[k]
+		if !ok {
+			t[k] = &CpuUsage{}
+		}
+		t[k].Name = v.Name
+		t[k].Idle = v.Idle
+		t[k].Total = v.Total
+	}
+}
 
 func ReadCpuStats(stats CpuStats) {
 	file, err := os.Open("/proc/stat")
