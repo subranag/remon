@@ -20,6 +20,8 @@ type RingBuffer interface {
 	Next() interface{}
 }
 
+// sliceRingBuffer uses slice as a mechanism to implement
+// RingBuffer interface
 type sliceRingBuffer struct {
 	elements []interface{}
 	capacity uint

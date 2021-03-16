@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/subranag/remon"
 )
 
@@ -9,10 +12,11 @@ type stud struct {
 }
 
 func main() {
-	rb := remon.NewRingBuffer(5)
-	counter := 0
-	for rb.Next() == nil {
-		rb.Add(&stud{data: counter})
-		counter += 1
+	stats := make(remon.CpuStats)
+
+	for i := 0; i < 200; i++ {
+		remon.ReadCpuStats(stats)
+		fmt.Printf("%v\n", stats["cpu3"])
+		time.Sleep(100 * time.Millisecond)
 	}
 }
