@@ -13,14 +13,16 @@ type stud struct {
 
 func main() {
 	stats := make(remon.CpuStats)
-	prevStats := make(remon.CpuStats)
+	statsReader, err := remon.NewCpuStatsReader()
 
-	for i := 0; i < 200; i++ {
-		remon.ReadCpuStats(stats)
-		if len(prevStats) > 0 {
-			fmt.Printf("utilization:%v\n", stats["cpu1"].Utilization(prevStats["cpu1"]))
-		}
-		time.Sleep(100 * time.Millisecond)
-		stats.Copy(prevStats)
+	if err != nil {
+		fmt.Printf("error reading cpu stats err:%v", err)
 	}
+	defer statsReader.Close()
+
+	statsReader.ReadStats(stats)
+	time.Sleep(500 * time.Millisecond)
+	fmt.Println()
+	statsReader.ReadStats(stats)
+	fmt.Printf("%v\n", stats["cpu"])
 }

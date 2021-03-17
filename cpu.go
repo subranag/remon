@@ -3,6 +3,7 @@ package remon
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strconv"
@@ -37,6 +38,64 @@ func (s CpuStats) Copy(t CpuStats) {
 		t[k].Name = v.Name
 		t[k].Idle = v.Idle
 		t[k].Total = v.Total
+	}
+}
+
+type CpuStatsReader interface {
+
+	//ReadStats reads the CpuStats for all CPUs in the host
+	//aggregate stats of the CPU are present in the "cpu" entry
+	//if CPU stats cannot be read the function returns an error
+	ReadStats(stats CpuStats) error
+
+	// Close closes the reader and releases any resources
+	// acquired for reading CPU status
+	Close()
+}
+
+type fileCpuStatsReader struct {
+	cpuStatsFile *os.File
+	reader       *bufio.Reader
+}
+
+func NewCpuStatsReader() (CpuStatsReader, error) {
+	file, err := os.Open("/proc/stat")
+	if err != nil {
+		fmt.Printf("error reading /proc/stat:%v\n", err)
+		return nil, err
+	}
+
+	fileStatsReader := &fileCpuStatsReader{cpuStatsFile: file, reader: bufio.NewReader(file)}
+	return fileStatsReader, nil
+}
+
+func (s *fileCpuStatsReader) ReadStats(stats CpuStats) error {
+	s.cpuStatsFile.Seek(0, io.SeekStart)
+	s.reader.Reset(s.cpuStatsFile)
+	for {
+		bytes, err := s.reader.ReadBytes('\n')
+
+		if len(bytes) > 0 {
+			agg := cpuAgg.FindSubmatch(bytes)
+			if len(agg) > 0 {
+				fmt.Printf("%v\n", agg)
+			}
+
+			cpu := singleCpu.FindSubmatch(bytes)
+			if len(cpu) > 0 {
+				fmt.Printf("%v\n", cpu)
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+	return nil
+}
+
+func (s *fileCpuStatsReader) Close() {
+	if s.cpuStatsFile != nil {
+		s.cpuStatsFile.Close()
 	}
 }
 
