@@ -43,10 +43,10 @@ func (s CpuStats) Copy(t CpuStats) {
 
 type CpuStatsReader interface {
 
-	//ReadStats reads the CpuStats for all CPUs in the host
-	//aggregate stats of the CPU are present in the "cpu" entry
-	//if CPU stats cannot be read the function returns an error
-	ReadStats(stats CpuStats) error
+	//Read reads the CpuStats for all CPUs in the host
+	//aggregate stats of the CPU are present in the "cpu" entry in CpuStats
+	//if the CPU stats cannot be read the function returns an error
+	Read(stats CpuStats) error
 
 	// Close closes the reader and releases any resources
 	// acquired for reading CPU status
@@ -69,7 +69,7 @@ func NewCpuStatsReader() (CpuStatsReader, error) {
 	return fileStatsReader, nil
 }
 
-func (s *fileCpuStatsReader) ReadStats(stats CpuStats) error {
+func (s *fileCpuStatsReader) Read(stats CpuStats) error {
 	s.cpuStatsFile.Seek(0, io.SeekStart)
 	s.reader.Reset(s.cpuStatsFile)
 	for {
@@ -78,15 +78,20 @@ func (s *fileCpuStatsReader) ReadStats(stats CpuStats) error {
 		if len(bytes) > 0 {
 			agg := cpuAgg.FindSubmatch(bytes)
 			if len(agg) > 0 {
-				fmt.Printf("%v\n", agg)
+				readCpuStat(agg, true, stats)
 			}
 
 			cpu := singleCpu.FindSubmatch(bytes)
 			if len(cpu) > 0 {
-				fmt.Printf("%v\n", cpu)
+				readCpuStat(cpu, false, stats)
 			}
 		}
+
 		if err != nil {
+			if err != io.EOF {
+				return err
+			}
+			// if the error is EOF we simply break
 			break
 		}
 	}
@@ -99,57 +104,39 @@ func (s *fileCpuStatsReader) Close() {
 	}
 }
 
-func ReadCpuStats(stats CpuStats) {
-	file, err := os.Open("/proc/stat")
-	if err != nil {
-		fmt.Printf("error reading /proc/stat:%v\n", err)
-		return
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		aggStat := cpuAgg.FindStringSubmatch(line)
-		if aggStat != nil {
-			stats["cpu"] = readCpuStat(aggStat, true)
-		}
-
-		cpuStat := singleCpu.FindStringSubmatch(line)
-		if cpuStat != nil {
-			stats["cpu"+cpuStat[1]] = readCpuStat(cpuStat, false)
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Println("error scanning /proc/stat")
-	}
-}
-
-func readCpuStat(rawStat []string, agg bool) *CpuUsage {
+func readCpuStat(rawStat [][]byte, agg bool, stats CpuStats) {
 	cpuTag := "cpu"
 	values := rawStat[1:]
 	if !agg {
-		cpuTag += rawStat[1]
+		cpuTag += string(rawStat[1])
 		values = rawStat[2:]
 	}
-	user := strToStat(values[0])
-	nice := strToStat(values[1])
-	system := strToStat(values[2])
-	idle := strToStat(values[3])
-	iowait := strToStat(values[4])
-	irq := strToStat(values[5])
-	softirq := strToStat(values[6])
-	steal := strToStat(values[7])
+	user := byteToStat(values[0])
+	nice := byteToStat(values[1])
+	system := byteToStat(values[2])
+	idle := byteToStat(values[3])
+	iowait := byteToStat(values[4])
+	irq := byteToStat(values[5])
+	softirq := byteToStat(values[6])
+	steal := byteToStat(values[7])
 
 	idleTotal := idle + iowait
 	total := user + nice + system + idle + iowait + irq + softirq + steal
-	return &CpuUsage{Name: cpuTag, Idle: idleTotal, Total: total}
+
+	_, present := stats[cpuTag]
+
+	if !present {
+		stats[cpuTag] = &CpuUsage{Name: cpuTag, Idle: idleTotal, Total: total}
+		return
+	}
+
+	stats[cpuTag].Name = cpuTag
+	stats[cpuTag].Idle = idleTotal
+	stats[cpuTag].Total = total
 }
 
-func strToStat(stat string) uint64 {
-	val, err := strconv.ParseUint(stat, 10, 64)
+func byteToStat(stat []byte) uint64 {
+	val, err := strconv.ParseUint(string(stat), 10, 64)
 	if err != nil {
 		panic(fmt.Sprintf("cannot have cpu usage value that is not a number found:%v", stat))
 	}
