@@ -12,12 +12,17 @@ import (
 var cpuAgg = regexp.MustCompile(`^cpu  (?P<user>\d+) (?P<nice>\d+) (?P<system>\d+) (?P<idle>\d+) (?P<iowait>\d+) (?P<irq>\d+) (?P<softirq>\d+) (?P<steal>\d+) (?P<guest>\d+) (?P<guest_nice>\d+)`)
 var singleCpu = regexp.MustCompile(`^cpu(?P<num>\d+) (?P<user>\d+) (?P<nice>\d+) (?P<system>\d+) (?P<idle>\d+) (?P<iowait>\d+) (?P<irq>\d+) (?P<softirq>\d+) (?P<steal>\d+) (?P<guest>\d+) (?P<guest_nice>\d+)`)
 
+//CpuUsage is the representation of CPU usage in a system
 type CpuUsage struct {
-	Name  string
-	Idle  uint64
+	//Name is the name of the cpu like cpu0, cpu1 ... cpuN
+	Name string
+	//Idle the idle time of the CPU
+	Idle uint64
+	//Total the total time of the CPU Used = Total - Idle
 	Total uint64
 }
 
+//Utilization provides the CPU utilization as compared the CpuUsage provided
 func (c *CpuUsage) Utilization(p *CpuUsage) float64 {
 	pUsage := p.Total - p.Idle
 	cUsage := c.Total - c.Idle
@@ -27,9 +32,12 @@ func (c *CpuUsage) Utilization(p *CpuUsage) float64 {
 	return (float64(dp) / float64(dt)) * 100.0
 }
 
+//CpuStats is the map representing CPU usage with the key being CPU name
+//and the value being CpuUsage of that CPU
 type CpuStats map[string]*CpuUsage
 
-func (s CpuStats) Copy(t CpuStats) {
+//CopyTo copies the stats from this stats to t
+func (s CpuStats) CopyTo(t CpuStats) {
 	for k, v := range s {
 		_, ok := t[k]
 		if !ok {
@@ -41,6 +49,8 @@ func (s CpuStats) Copy(t CpuStats) {
 	}
 }
 
+//CpuStatsReader can be used to read the CPU stats, please note to call the Close
+//function to release resources otherwise there might be resource leakage
 type CpuStatsReader interface {
 
 	//Read reads the CpuStats for all CPUs in the host
@@ -53,11 +63,13 @@ type CpuStatsReader interface {
 	Close()
 }
 
+//fileCpuStatsReader is the Linux flavor implementation of the CpuStatsReader
 type fileCpuStatsReader struct {
 	cpuStatsFile *os.File
 	reader       *bufio.Reader
 }
 
+//NewCpuStatsReader returns a new CpuStatsReader error otherwise
 func NewCpuStatsReader() (CpuStatsReader, error) {
 	file, err := os.Open("/proc/stat")
 	if err != nil {

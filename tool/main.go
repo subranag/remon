@@ -14,6 +14,7 @@ type stud struct {
 
 func main() {
 	stats := make(remon.CpuStats)
+	prevStats := make(remon.CpuStats)
 	statsReader, err := remon.NewCpuStatsReader()
 
 	if err != nil {
@@ -22,10 +23,16 @@ func main() {
 	}
 	defer statsReader.Close()
 
-	statsReader.Read(stats)
-	fmt.Printf("%v\n", stats["cpu0"])
-	time.Sleep(500 * time.Millisecond)
-	fmt.Println()
-	statsReader.Read(stats)
-	fmt.Printf("%v\n", stats["cpu0"])
+	for i := 0; i < 200; i++ {
+		statsReader.Read(stats)
+		if len(prevStats) > 0 {
+			for k, v := range stats {
+				util := v.Utilization(prevStats[k])
+				fmt.Printf("%v:%v ", k, util)
+			}
+			fmt.Println()
+		}
+		stats.CopyTo(prevStats)
+		time.Sleep(500 * time.Millisecond)
+	}
 }
