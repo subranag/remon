@@ -1,13 +1,12 @@
 package remon
 
 import (
-	"bufio"
 	"fmt"
-	"io"
-	"os"
 	"regexp"
 	"strconv"
 )
+
+const procStat = "/proc/stat"
 
 var cpuAgg = regexp.MustCompile(`^cpu  (?P<user>\d+) (?P<nice>\d+) (?P<system>\d+) (?P<idle>\d+) (?P<iowait>\d+) (?P<irq>\d+) (?P<softirq>\d+) (?P<steal>\d+) (?P<guest>\d+) (?P<guest_nice>\d+)`)
 var singleCpu = regexp.MustCompile(`^cpu(?P<num>\d+) (?P<user>\d+) (?P<nice>\d+) (?P<system>\d+) (?P<idle>\d+) (?P<iowait>\d+) (?P<irq>\d+) (?P<softirq>\d+) (?P<steal>\d+) (?P<guest>\d+) (?P<guest_nice>\d+)`)
@@ -65,55 +64,34 @@ type CpuStatsReader interface {
 
 //fileCpuStatsReader is the Linux flavor implementation of the CpuStatsReader
 type fileCpuStatsReader struct {
-	cpuStatsFile *os.File
-	reader       *bufio.Reader
+	fileReader *fileReader
 }
 
 //NewCpuStatsReader returns a new CpuStatsReader error otherwise
 func NewCpuStatsReader() (CpuStatsReader, error) {
-	file, err := os.Open("/proc/stat")
+	fileReader, err := newReader(procStat)
 	if err != nil {
-		fmt.Printf("error reading /proc/stat:%v\n", err)
 		return nil, err
 	}
-
-	fileStatsReader := &fileCpuStatsReader{cpuStatsFile: file, reader: bufio.NewReader(file)}
-	return fileStatsReader, nil
+	return &fileCpuStatsReader{fileReader: fileReader}, nil
 }
 
 func (s *fileCpuStatsReader) Read(stats CpuStats) error {
-	s.cpuStatsFile.Seek(0, io.SeekStart)
-	s.reader.Reset(s.cpuStatsFile)
-	for {
-		bytes, err := s.reader.ReadBytes('\n')
-
-		if len(bytes) > 0 {
-			agg := cpuAgg.FindSubmatch(bytes)
-			if len(agg) > 0 {
-				readCpuStat(agg, true, stats)
-			}
-
-			cpu := singleCpu.FindSubmatch(bytes)
-			if len(cpu) > 0 {
-				readCpuStat(cpu, false, stats)
-			}
+	return s.fileReader.processLines(func(bytes []byte) {
+		agg := cpuAgg.FindSubmatch(bytes)
+		if len(agg) > 0 {
+			readCpuStat(agg, true, stats)
 		}
 
-		if err != nil {
-			if err != io.EOF {
-				return err
-			}
-			// if the error is EOF we simply break
-			break
+		cpu := singleCpu.FindSubmatch(bytes)
+		if len(cpu) > 0 {
+			readCpuStat(cpu, false, stats)
 		}
-	}
-	return nil
+	})
 }
 
 func (s *fileCpuStatsReader) Close() {
-	if s.cpuStatsFile != nil {
-		s.cpuStatsFile.Close()
-	}
+	s.fileReader.close()
 }
 
 func readCpuStat(rawStat [][]byte, agg bool, stats CpuStats) {
