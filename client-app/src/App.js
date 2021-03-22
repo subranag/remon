@@ -1,24 +1,20 @@
 import logo from './logo.svg';
 import './App.css';
+import { Button, Grommet, Header, Menu } from 'grommet'
+import { Trigger,  Cpu, Memory, Disc, Cluster, Search} from 'grommet-icons'
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Grommet>
+      <Header background="brand" align="center" justify="start" pad="small">
+        <Button icon={<Cpu />} label="CPU" hoverIndicator />
+        <Button icon={<Memory />} label="Memory" hoverIndicator />
+        <Button icon={<Disc />} label="Disk" hoverIndicator />
+        <Button icon={<Cluster />} label="Network" hoverIndicator />
+        <Button icon={<Trigger />} label="Processes" hoverIndicator />
+        <Button icon={<Search />} label="Logs" hoverIndicator />
+      </Header>
+    </Grommet>
   );
 }
 
