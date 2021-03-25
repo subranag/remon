@@ -13,7 +13,11 @@ type stud struct {
 }
 
 func main() {
-	readMem()
+	server := remon.NewServer("localhost:5000", "client-app/build", "index.html")
+	if err := server.Start(); err != nil {
+		fmt.Printf("error starting server :%v", err)
+		os.Exit(1)
+	}
 }
 
 func readMem() {
