@@ -1,11 +1,27 @@
 package remon
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gorilla/mux"
+
+	"github.com/gorilla/websocket"
+)
+
+const (
+	statsWriteFrequency = time.Millisecond * 500
+	writeWait           = time.Second * 2
+)
+
+var (
+	upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
 )
 
 type Server interface {
@@ -41,6 +57,7 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// check whether a file exists at the given path
 	_, err = os.Stat(path)
 	if os.IsNotExist(err) {
+		fmt.Println("Iam here")
 		// file does not exist, serve index.html
 		http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
 		return
@@ -60,7 +77,7 @@ type muxServer struct {
 	addr   string
 }
 
-func (s muxServer) Start() error {
+func (s *muxServer) Start() error {
 	srv := &http.Server{
 		Handler: s.router,
 		Addr:    s.addr,
@@ -68,8 +85,73 @@ func (s muxServer) Start() error {
 	return srv.ListenAndServe()
 }
 
+func serveWsCpu(w http.ResponseWriter, r *http.Request) {
+	ws, err := upgrader.Upgrade(w, r, nil)
+
+	if err != nil {
+		if _, ok := err.(websocket.HandshakeError); !ok {
+			fmt.Println(err)
+		}
+		return
+	}
+
+	go writer(ws)
+	reader(ws)
+}
+
+func reader(ws *websocket.Conn) {
+	ws.SetReadDeadline(time.Time{})
+	for {
+		if _, _, err := ws.ReadMessage(); err != nil {
+			ws.Close()
+			break
+		}
+	}
+}
+
+func writer(ws *websocket.Conn) {
+	writeTicker := time.NewTicker(statsWriteFrequency)
+
+	defer func() {
+		writeTicker.Stop()
+	}()
+
+	stats := make(CpuStats)
+	prevStats := make(CpuStats)
+	cpuStats, err := NewCpuStatsReader()
+	cpuUtil := make(map[string]float64)
+
+	if err != nil {
+		closeMsg := websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error())
+		ws.WriteMessage(websocket.CloseMessage, closeMsg)
+	}
+
+	for {
+		select {
+		case <-writeTicker.C:
+			ws.SetWriteDeadline(time.Now().Add(writeWait))
+			cpuStats.Read(stats)
+			if len(prevStats) > 0 {
+				for k, v := range stats {
+					cpuUtil[k] = v.Utilization(prevStats[k])
+				}
+				//write map to websocket
+				ws.WriteJSON(cpuUtil)
+			}
+			stats.CopyTo(prevStats)
+		}
+	}
+}
+
 func NewServer(addr, staticPath, indexPath string) Server {
-	r := mux.NewRouter()
+	r := mux.NewRouter().StrictSlash(true)
+
+	r.HandleFunc("/api/ping", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "pong")
+	})
+
+	r.HandleFunc("/api/ws/cpu", serveWsCpu)
+
 	spa := spaHandler{staticPath: staticPath, indexPath: indexPath}
 	r.PathPrefix("/").Handler(spa)
 	return &muxServer{router: r, addr: addr}

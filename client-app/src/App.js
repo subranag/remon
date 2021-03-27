@@ -4,6 +4,8 @@ import { Trigger, Cpu, Memory, Disc, Cluster, Search } from 'grommet-icons'
 import GaugeChart from 'react-gauge-chart'
 import { useEffect, useState } from 'react';
 
+const client = new WebSocket('ws://localhost:5000/api/ws/cpu')
+
 function App() {
   const [percent, setPercent] = useState(0.86);
 
@@ -15,6 +17,14 @@ function App() {
     const timer = setInterval(() => {
       setPercent(randomBetween(0.5, 0.7));
     }, 1000)
+
+    client.onopen = () => {
+      console.log('websocket client connected')
+    };
+
+    client.onmessage = (message) => {
+      console.log(JSON.parse(message.data))
+    };
 
     return () => clearInterval(timer);
   }, []);
