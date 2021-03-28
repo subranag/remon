@@ -4,7 +4,7 @@ import { Trigger, Cpu, Memory, Disc, Cluster, Search } from 'grommet-icons'
 import GaugeChart from 'react-gauge-chart'
 import { useEffect, useState } from 'react';
 
-const client = new WebSocket('ws://localhost:5000/api/ws/cpu')
+const client = new WebSocket(`ws://${window.location.host}/api/ws/cpu`)
 
 function App() {
   const [percent, setPercent] = useState(0.86);
