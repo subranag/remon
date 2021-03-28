@@ -14,19 +14,16 @@ function App() {
   }
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setPercent(randomBetween(0.5, 0.7));
-    }, 1000)
-
     client.onopen = () => {
       console.log('websocket client connected')
     };
 
     client.onmessage = (message) => {
-      console.log(JSON.parse(message.data))
+      const data = JSON.parse(message.data);
+      const cpuAgg = (data['cpu'] / 100.00);
+      console.log(cpuAgg);
+      setPercent(cpuAgg);
     };
-
-    return () => clearInterval(timer);
   }, []);
 
   return (
